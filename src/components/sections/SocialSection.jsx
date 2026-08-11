@@ -3,7 +3,7 @@ import { Facebook, Instagram, Users, Eye, Heart, TrendingUp, Megaphone, DollarSi
 import { KPICard, KPICardSkeleton } from '../ui/KPICard'
 import { SectionHeader, EmptyState } from '../ui/SectionHeader'
 import { ChartCard, TrendLineChart } from '../ui/Charts'
-import { PlatformInsightsCard, mergeLegacyObservations } from '../ui/EditorialInsights'
+import { PlatformInsightsCard, PaidMediaExecutiveCard, BreakdownInsightsAccordion, mergeLegacyObservations } from '../ui/EditorialInsights'
 import { TopPostsSection } from '../ui/PostCard'
 import { DataTable } from '../ui/DataTable'
 import { CampaignToggle } from '../ui/CampaignToggle'
@@ -163,9 +163,8 @@ function findCampaignPerformance(performanceMap, row) {
   return null
 }
 
-export function PaidMediaSection({ platform, month, campanas, proyecciones, accent, hallazgos = [], observaciones = [] }) {
+export function PaidMediaSection({ platform, month, campanas, allCampanas = [], proyecciones, accent, hallazgos = [], observaciones = [] }) {
   const [bucket, setBucket] = useState('mensual')
-  const [open, setOpen]     = useState(false)
   const paidHallazgos = useMemo(() => mergeLegacyObservations(
     (hallazgos || []).filter(h => String(h.seccion || '').toLowerCase() === `${platform}-paid`),
     (observaciones || []).filter(o => String(o.seccion || '').toLowerCase() === `${platform}-paid`)
@@ -183,11 +182,20 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
     () => (proyecciones || []).filter(p => normPlat(p.plataforma) === platform && p.mes === pm),
     [proyecciones, platform, pm]
   )
+  const py = month ? `${Number(String(month).slice(0, 4)) - 1}-${String(month).slice(5, 7)}` : null
 
   const inversionTotal = useMemo(() => campanaInversion(campanas, platform, null), [campanas, platform])
   const platformPerformance = useMemo(
     () => buildCampaignPerformance(campanas, platform, null),
     [campanas, platform]
+  )
+  const prevPlatformPerformance = useMemo(
+    () => buildCampaignPerformance((allCampanas || []).filter(r => r.mes === pm), platform, null),
+    [allCampanas, platform, pm]
+  )
+  const yearPlatformPerformance = useMemo(
+    () => buildCampaignPerformance((allCampanas || []).filter(r => r.mes === py), platform, null),
+    [allCampanas, platform, py]
   )
 
   const groups = useMemo(() => getGroups(platProy), [platProy])
@@ -223,8 +231,16 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
 
   // Previous month totals by metric (for vs anterior badge)
   const prevMetricMap = useMemo(() => {
-    return {}
-  }, [prevPlatProy])
+    const map = {}
+    for (const [key, actual] of Object.entries(prevPlatformPerformance)) map[key] = actual.resultado
+    return map
+  }, [prevPlatformPerformance])
+
+  const yearMetricMap = useMemo(() => {
+    const map = {}
+    for (const [key, actual] of Object.entries(yearPlatformPerformance)) map[key] = actual.resultado
+    return map
+  }, [yearPlatformPerformance])
 
   // ── Mapa inversión por objetivo a nivel plataforma (todos los grupos) ──
   const platObjInvMap = useMemo(
@@ -234,8 +250,7 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
 
   // ── CPR por métrica a nivel plataforma: inversión(objetivo) / resultado(objetivo) ──
   // Intenta matchear por metrica Y por objetivo (pueden tener nombres distintos)
-  const platformCPRs = useMemo(() => {
-    // Construir mapa inverso: para cada fila de proyección, mapear su metrica → su objetivo
+  const metricObjectiveMap = useMemo(() => {
     const metricToObj = {}
     const objToMetric = {}
     for (const r of platProy) {
@@ -243,7 +258,11 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
       const ok = normKey(r.objetivo || '')
       if (mk && ok) { metricToObj[mk] = ok; objToMetric[ok] = mk }
     }
+    return { metricToObj, objToMetric }
+  }, [platProy])
 
+  const platformCPRs = useMemo(() => {
+    const { metricToObj, objToMetric } = metricObjectiveMap
     const result = metricTotals.map(m => {
       const key = normKey(m.metrica || '')
       // Buscar inversión: primero por key directo, luego por objetivo mapeado
@@ -257,7 +276,7 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
     }).filter(c => c.cpr > 0)
 
     return result
-  }, [metricTotals, platObjInvMap, platProy, campanas, platform])
+  }, [metricTotals, platObjInvMap, metricObjectiveMap])
 
   // ── CPR Meta a nivel plataforma (promedio desde sheet) ──
   const platCPRMetaMap = useMemo(
@@ -294,6 +313,8 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
 
   const groupInversion = useMemo(() => campanaInversion(campanas, platform, bucket), [campanas, platform, bucket])
   const groupLabel     = groups.find(g => g.key === bucket)?.label || bucket
+  const prevInversion = useMemo(() => campanaInversion((allCampanas || []).filter(r => r.mes === pm), platform, null), [allCampanas, platform, pm])
+  const yearInversion = useMemo(() => campanaInversion((allCampanas || []).filter(r => r.mes === py), platform, null), [allCampanas, platform, py])
 
   // Subtítulo del header
   const subtitle = [
@@ -304,59 +325,57 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${accent}33` }}>
-      {/* Header colapsable */}
-      <div
-        className="flex items-center justify-between px-5 py-4 cursor-pointer select-none"
-        style={{ background: `${accent}14` }}
-        onClick={() => setOpen(v => !v)}
-      >
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl" style={{ background: `${accent}25` }}>
-            <BarChart2 className="w-4 h-4" style={{ color: accent }} />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-white">Paid Media</p>
-            {subtitle && <p className="text-[11px] text-white/50">{subtitle}</p>}
-          </div>
+      <div className="flex items-center gap-3 px-5 py-4" style={{ background: `${accent}14` }}>
+        <div className="p-2 rounded-xl" style={{ background: `${accent}25` }}>
+          <BarChart2 className="w-4 h-4" style={{ color: accent }} />
         </div>
-        <button className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-          {open ? <ChevronUp className="w-4 h-4 text-white/60" /> : <ChevronDown className="w-4 h-4 text-white/60" />}
-        </button>
+        <div>
+          <p className="text-sm font-bold text-white">Paid Media</p>
+          {subtitle && <p className="text-[11px] text-white/50">{subtitle}</p>}
+        </div>
       </div>
 
-      {open && (
-        <div className="p-5 space-y-6" style={{ background: 'rgba(0,0,0,0.28)' }}>
+      <div className="p-5 space-y-6" style={{ background: 'rgba(0,0,0,0.28)' }}>
 
-          {/* ── Totales del mes ── */}
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-white/40 font-semibold mb-3">
-              Totales del mes
-            </p>
-            <div className={`grid gap-3 ${
-              metricTotals.length === 0 ? 'grid-cols-1' :
-              (metricTotals.length + 1) <= 2 ? 'grid-cols-2' :
-              (metricTotals.length + 1) <= 3 ? 'grid-cols-3' :
-              'grid-cols-2 lg:grid-cols-4'
-            }`}>
+          {/* ── Totales del mes + lectura ejecutiva ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.75fr)] gap-4 items-stretch">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/40 font-semibold mb-3">
+                Totales del mes
+              </p>
+              <div className={`grid gap-3 ${
+                metricTotals.length === 0 ? 'grid-cols-1' :
+                (metricTotals.length + 1) <= 2 ? 'grid-cols-2' :
+                (metricTotals.length + 1) <= 3 ? 'grid-cols-3' :
+                'grid-cols-2 lg:grid-cols-4'
+              }`}>
               {inversionTotal > 0 && (
                 <KPICard title="Inversión Total" value={inversionTotal} icon={DollarSign}
-                  accentColor="#f59e0b" formatter={formatCurrency} delay={0} />
+                  accentColor="#f59e0b" formatter={formatCurrency}
+                  variation={prevInversion > 0 ? pctChange(inversionTotal, prevInversion) : null}
+                  variationYear={yearInversion > 0 ? pctChange(inversionTotal, yearInversion) : null}
+                  delay={0} />
               )}
               {metricTotals.map((m, i) => {
                 const s = metricStyle(m.metrica)
                 const key = normKey(m.metrica || '')
                 const prevVal = prevMetricMap[key] || 0
-                const varVsAnt = pctChange(m.resultado, prevVal)
+                const yearVal = yearMetricMap[key] || 0
+                const varVsAnt = prevVal > 0 ? pctChange(m.resultado, prevVal) : null
+                const varVsYear = yearVal > 0 ? pctChange(m.resultado, yearVal) : null
                 const varVsProy = m.meta > 0 ? pctChange(m.resultado, m.meta) : null
                 return (
                   <KPICard key={m.metrica} title={capitalize(m.metrica)} value={m.resultado}
                     icon={s.icon} accentColor={s.accent}
                     variation={varVsAnt}
+                    variationYear={varVsYear}
                     variationProj={varVsProy}
                     delay={i + 1} />
                 )
               })}
+              </div>
             </div>
+            {paidHallazgos.length > 0 && <PaidMediaExecutiveCard items={paidHallazgos} accent={accent} />}
           </div>
 
           {/* ── CPR por objetivo a nivel plataforma ── */}
@@ -373,12 +392,13 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
                 {platformCPRs.map((c, i) => {
                   const s = metricStyle(c.metrica)
                   const metaVal = platCPRMetaMap[c.key]
-                  // Variación: negativo es mejor (menor costo), pero mostramos como:
-                  // si CPR real < meta → positivo (bueno), si CPR real > meta → negativo (malo)
-                  let variation = undefined
-                  if (metaVal && metaVal > 0) {
-                    variation = ((metaVal - c.cpr) / metaVal) * 100
-                  }
+                  const variation = metaVal && metaVal > 0 ? pctChange(c.cpr, metaVal) : null
+                  const altKey = metricObjectiveMap.metricToObj[c.key] || metricObjectiveMap.objToMetric[c.key]
+                  const yearActual = yearPlatformPerformance[c.key] || (altKey ? yearPlatformPerformance[altKey] : null)
+                  const yearInv = yearActual?.inversion || 0
+                  const yearResult = yearActual?.resultado || 0
+                  const yearCpr = yearResult > 0 ? (isCPM(c.metrica) ? (yearInv / yearResult) * 1000 : yearInv / yearResult) : 0
+                  const variationYear = yearCpr > 0 ? pctChange(c.cpr, yearCpr) : null
                   return (
                     <KPICard
                       key={`cpr-${c.key}`}
@@ -388,6 +408,8 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
                       accentColor={s.accent}
                       formatter={v => `$${formatDecimal(v, 2)}`}
                       variation={variation}
+                      variationYear={variationYear}
+                      lowerIsBetter
                       subtitle={metaVal > 0 ? `Meta: $${formatDecimal(metaVal, 2)}` : undefined}
                       delay={i}
                     />
@@ -395,6 +417,10 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
                 })}
               </div>
             </div>
+          )}
+
+          {paidHallazgos.length > 0 && (
+            <BreakdownInsightsAccordion items={paidHallazgos} accent={accent} />
           )}
 
           {/* ── Desglose por grupo ── */}
@@ -492,12 +518,7 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
             )}
           </div>
 
-          {paidHallazgos.length > 0 && (
-            <PlatformInsightsCard items={paidHallazgos} accent={accent} label="Ver hallazgos" />
-          )}
-
-        </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -506,7 +527,7 @@ export function PaidMediaSection({ platform, month, campanas, proyecciones, acce
 // SocialSection principal (Facebook e Instagram)
 // ═══════════════════════════════════════════════════════════════════════════════
 export function SocialSection({
-  platform, data, campanas = [], proyecciones = [], topPosts = [],
+  platform, data, campanas = [], allCampanas = [], proyecciones = [], topPosts = [],
   observaciones, historical = [], loading, hallazgos = [],
 }) {
   const cfg = PLATFORM_CONFIG[platform] || PLATFORM_CONFIG.facebook
@@ -538,6 +559,9 @@ export function SocialSection({
   const pm = prevMonth(data?.mes)
   const prevData = (historical || []).find(r => r.mes === pm)
   const prevEngagement = prevData ? (Math.floor(safeNumber(prevData.engagement_rate) * 10000) / 100) : null
+  const yearMonth = activeMonth ? `${Number(String(activeMonth).slice(0, 4)) - 1}-${String(activeMonth).slice(5, 7)}` : null
+  const yearData = (historical || []).find(r => r.mes === yearMonth)
+  const yearEngagement = yearData ? (Math.floor(safeNumber(yearData.engagement_rate) * 10000) / 100) : null
 
   const trendData = (historical || [])
     .filter(r => r.mes && (!activeMonth || r.mes <= activeMonth))
@@ -551,10 +575,10 @@ export function SocialSection({
     }))
 
   const primaryKpis = [
-    { key: 'seguidores',    title: 'Seguidores',    value: safeNumber(data.seguidores),    icon: Users,      accent: cfg.accent, variation: pctChange(data.seguidores, prevData?.seguidores) },
-    { key: 'alcance',       title: 'Alcance',       value: safeNumber(data.alcance),       icon: Eye,        accent: '#22d3ee',  variation: pctChange(data.alcance, prevData?.alcance) },
-    { key: 'interacciones', title: 'Interacciones', value: safeNumber(data.interacciones), icon: Heart,      accent: '#ec4899',  variation: pctChange(data.interacciones, prevData?.interacciones) },
-    { key: 'engagement',    title: 'Engagement',    value: engagement,                     icon: TrendingUp, accent: '#22c55e', suffix: '%', fmt: v => v, variation: pctChange(parseFloat(engagement), prevEngagement) },
+    { key: 'seguidores',    title: 'Seguidores',    value: safeNumber(data.seguidores),    icon: Users,      accent: cfg.accent, variation: pctChange(data.seguidores, prevData?.seguidores), variationYear: pctChange(data.seguidores, yearData?.seguidores) },
+    { key: 'alcance',       title: 'Alcance',       value: safeNumber(data.alcance),       icon: Eye,        accent: '#22d3ee',  variation: pctChange(data.alcance, prevData?.alcance), variationYear: pctChange(data.alcance, yearData?.alcance) },
+    { key: 'interacciones', title: 'Interacciones', value: safeNumber(data.interacciones), icon: Heart,      accent: '#ec4899',  variation: pctChange(data.interacciones, prevData?.interacciones), variationYear: pctChange(data.interacciones, yearData?.interacciones) },
+    { key: 'engagement',    title: 'Engagement',    value: engagement,                     icon: TrendingUp, accent: '#22c55e', suffix: '%', fmt: v => v, variation: pctChange(parseFloat(engagement), prevEngagement), variationYear: pctChange(parseFloat(engagement), yearEngagement) },
   ]
 
   const secondaryKpis = [
@@ -580,7 +604,7 @@ export function SocialSection({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {primaryKpis.map((k, i) => (
           <KPICard key={k.key} title={k.title} value={k.value} icon={k.icon}
-            accentColor={k.accent} suffix={k.suffix} formatter={k.fmt} variation={k.variation} delay={i} />
+            accentColor={k.accent} suffix={k.suffix} formatter={k.fmt} variation={k.variation} variationYear={k.variationYear} delay={i} />
         ))}
       </div>
 
@@ -613,6 +637,7 @@ export function SocialSection({
         platform={platform}
         month={activeMonth}
         campanas={campanas}
+        allCampanas={allCampanas}
         proyecciones={proyecciones}
         accent={cfg.accent}
         hallazgos={hallazgos}
