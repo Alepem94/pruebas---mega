@@ -4,24 +4,26 @@ import { LineChart, Line, ResponsiveContainer, Area, AreaChart } from 'recharts'
 import { useCountUp } from '../../hooks/useCountUp'
 import { formatNumber, truncTo } from '../../utils/format'
 
-function VariationBadge({ value, label }) {
+function VariationBadge({ value, label, lowerIsBetter = false }) {
   const num = parseFloat(value)
   if (isNaN(num)) return null
   const isPos = num > 0
   const isNeg = num < 0
+  const isGood = lowerIsBetter ? isNeg : isPos
+  const isBad = lowerIsBetter ? isPos : isNeg
   return (
     <div
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold
-        ${isPos ? 'badge-positive' : ''}
-        ${isNeg ? 'badge-negative' : ''}
+        ${isGood ? 'badge-positive' : ''}
+        ${isBad ? 'badge-negative' : ''}
         ${!isPos && !isNeg ? 'badge-neutral' : ''}`}
       title={label}
     >
-      {isPos && <TrendingUp className="w-2.5 h-2.5" />}
-      {isNeg && <TrendingDown className="w-2.5 h-2.5" />}
+      {isPos && <TrendingUp className="w-3 h-3" />}
+      {isNeg && <TrendingDown className="w-3 h-3" />}
       {!isPos && !isNeg && <Minus className="w-2.5 h-2.5" />}
-      <span>{isPos ? '+' : ''}{truncTo(num, 2)}%</span>
-      {label && <span className="opacity-60 ml-0.5">{label}</span>}
+      <span className="font-bold">{isPos ? '+' : ''}{truncTo(num, 2)}%</span>
+      {label && <span className="opacity-70 ml-0.5 whitespace-nowrap">{label}</span>}
     </div>
   )
 }
@@ -38,6 +40,8 @@ export function KPICard({
   value,
   variation,           // % change vs previous period
   variationProj,       // % change vs projection (optional second badge)
+  variationYear,       // % change vs same month previous year
+  lowerIsBetter = false, // true for cost metrics such as CPR/CPM/CPI/CPV
   subtitle,
   icon: Icon,
   prefix = '',
@@ -57,9 +61,10 @@ export function KPICard({
 
   const hasVar   = variation !== null && variation !== undefined && !isNaN(parseFloat(variation))
   const hasProj  = variationProj !== null && variationProj !== undefined && !isNaN(parseFloat(variationProj))
+  const hasYear  = variationYear !== null && variationYear !== undefined && !isNaN(parseFloat(variationYear))
   const numVar   = hasVar ? parseFloat(variation) : 0
 
-  const trendColor = hasVar ? (numVar > 0 ? '#22c55e' : numVar < 0 ? '#ef4444' : accentColor) : accentColor
+  const trendColor = hasVar ? ((lowerIsBetter ? numVar < 0 : numVar > 0) ? '#22c55e' : (lowerIsBetter ? numVar > 0 : numVar < 0) ? '#ef4444' : accentColor) : accentColor
   const trendId = `spark-${title.replace(/\s/g, '')}-${delay}`
 
   return (
@@ -89,10 +94,11 @@ export function KPICard({
             </div>
           )}
 
-          {(hasVar || hasProj) && (
+          {(hasVar || hasProj || hasYear) && (
             <div className="flex flex-col items-end gap-1">
-              {hasVar && <VariationBadge value={variation} label="vs ant." />}
-              {hasProj && <VariationBadge value={variationProj} label="vs proy." />}
+              {hasVar && <VariationBadge value={variation} label="vs periodo anterior" lowerIsBetter={lowerIsBetter} />}
+              {hasProj && <VariationBadge value={variationProj} label="vs proyección" lowerIsBetter={lowerIsBetter} />}
+              {hasYear && <VariationBadge value={variationYear} label="vs año anterior" lowerIsBetter={lowerIsBetter} />}
             </div>
           )}
         </div>
