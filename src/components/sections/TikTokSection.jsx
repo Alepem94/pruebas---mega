@@ -10,7 +10,7 @@ import { PaidMediaSection } from './SocialSection'
 const ACCENT = '#a855f7'
 
 export function TikTokSection({
-  data, campanas = [], proyecciones = [], topPosts = [],
+  data, campanas = [], allCampanas = [], proyecciones = [], topPosts = [],
   observaciones, historical = [], loading, hallazgos = [],
 }) {
   const activeMonth = data?.mes || null
@@ -40,6 +40,9 @@ export function TikTokSection({
   const pm = prevMonth(data?.mes)
   const prevData = (historical || []).find(r => r.mes === pm)
   const prevEngagement = prevData ? (Math.floor(safeNumber(prevData.engagement_rate) * 10000) / 100) : null
+  const yearMonth = activeMonth ? `${Number(String(activeMonth).slice(0, 4)) - 1}-${String(activeMonth).slice(5, 7)}` : null
+  const yearData = (historical || []).find(r => r.mes === yearMonth)
+  const yearEngagement = yearData ? (Math.floor(safeNumber(yearData.engagement_rate) * 10000) / 100) : null
 
   const trendData = (historical || [])
     .filter(r => r.mes && (!activeMonth || r.mes <= activeMonth))
@@ -67,10 +70,10 @@ export function TikTokSection({
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Seguidores"       value={safeNumber(data.seguidores)}        icon={Users}      accentColor={ACCENT}     variation={pctChange(data.seguidores, prevData?.seguidores)} delay={0} />
-        <KPICard title="Views"            value={safeNumber(data.views)}             icon={Play}       accentColor="#f97316"    variation={pctChange(data.views, prevData?.views)} delay={1} />
-        <KPICard title="Views 6s+"        value={safeNumber(data.views_6s)}          icon={Eye}        accentColor="#a78bfa"    variation={pctChange(data.views_6s, prevData?.views_6s)} delay={2} />
-        <KPICard title="Interacciones"    value={safeNumber(data.interacciones)}     icon={Heart}      accentColor="#f43f5e"    variation={pctChange(data.interacciones, prevData?.interacciones)} delay={3} />
+        <KPICard title="Seguidores"       value={safeNumber(data.seguidores)}        icon={Users}      accentColor={ACCENT}     variation={pctChange(data.seguidores, prevData?.seguidores)} variationYear={pctChange(data.seguidores, yearData?.seguidores)} delay={0} />
+        <KPICard title="Views"            value={safeNumber(data.views)}             icon={Play}       accentColor="#f97316"    variation={pctChange(data.views, prevData?.views)} variationYear={pctChange(data.views, yearData?.views)} delay={1} />
+        <KPICard title="Views 6s+"        value={safeNumber(data.views_6s)}          icon={Eye}        accentColor="#a78bfa"    variation={pctChange(data.views_6s, prevData?.views_6s)} variationYear={pctChange(data.views_6s, yearData?.views_6s)} delay={2} />
+        <KPICard title="Interacciones"    value={safeNumber(data.interacciones)}     icon={Heart}      accentColor="#f43f5e"    variation={pctChange(data.interacciones, prevData?.interacciones)} variationYear={pctChange(data.interacciones, yearData?.interacciones)} delay={3} />
       </div>
 
       {[
@@ -81,11 +84,11 @@ export function TikTokSection({
         <div className="grid grid-cols-3 gap-4">
           {safeNumber(data.engagement_rate) > 0 && (
             <KPICard title="Engagement" value={engagement} suffix="%" icon={TrendingUp}
-              accentColor="#22c55e" formatter={v => v} variation={pctChange(parseFloat(engagement), prevEngagement)} delay={4} />
+              accentColor="#22c55e" formatter={v => v} variation={pctChange(parseFloat(engagement), prevEngagement)} variationYear={pctChange(parseFloat(engagement), yearEngagement)} delay={4} />
           )}
           {safeNumber(data.nuevos_seguidores) > 0 && (
             <KPICard title="Nuevos Seguidores" value={safeNumber(data.nuevos_seguidores)}
-              icon={Users} accentColor={ACCENT} variation={pctChange(data.nuevos_seguidores, prevData?.nuevos_seguidores)} delay={5} />
+              icon={Users} accentColor={ACCENT} variation={pctChange(data.nuevos_seguidores, prevData?.nuevos_seguidores)} variationYear={pctChange(data.nuevos_seguidores, yearData?.nuevos_seguidores)} delay={5} />
           )}
           {safeNumber(data.publicaciones) > 0 && (
             <KPICard title="Publicaciones" value={safeNumber(data.publicaciones)}
@@ -112,6 +115,7 @@ export function TikTokSection({
         platform="tiktok"
         month={activeMonth}
         campanas={campanas}
+        allCampanas={allCampanas}
         proyecciones={proyecciones}
         accent={ACCENT}
         hallazgos={hallazgos}
