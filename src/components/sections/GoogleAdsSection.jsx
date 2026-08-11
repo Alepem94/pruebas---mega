@@ -1,9 +1,14 @@
+ca
+/
+GoogleAdsSection.jsx
+
+
 import { useMemo } from 'react'
 import { Megaphone, Eye, MousePointerClick, DollarSign, TrendingUp, Film, Target } from 'lucide-react'
 import { KPICard, KPICardSkeleton } from '../ui/KPICard'
 import { SectionHeader, EmptyState } from '../ui/SectionHeader'
 import { ChartCard, DistributionDonut } from '../ui/Charts'
-import { PlatformInsightsCard, mergeLegacyObservations } from '../ui/EditorialInsights'
+import { PlatformInsightsCard, BreakdownInsightsAccordion, mergeLegacyObservations } from '../ui/EditorialInsights'
 import { DataTable } from '../ui/DataTable'
 import { safeNumber, formatNumber, formatCurrency, formatDecimal, truncTo } from '../../utils/format'
 import { getGoogleObjective } from '../../utils/campaigns'
@@ -30,7 +35,26 @@ function getResultLabel(obj) {
   return 'Resultado'
 }
 
-export function GoogleAdsSection({ data = [], ciudades = [], keywords = [], proyecciones = [], selectedMonth, observaciones, loading, hallazgos = [] }) {
+function aggregateGoogleMonth(rows = [], month) {
+  const monthRows = (rows || []).filter(r => r.mes === month).map(classifyRow)
+  if (!monthRows.length) return null
+  const display = monthRows.filter(r => r._obj === 'Display')
+  const video = monthRows.filter(r => r._obj === 'Video')
+  const impresiones = monthRows.reduce((s, r) => s + safeNumber(r.impresiones_visibles), 0)
+  const clics = monthRows.reduce((s, r) => s + safeNumber(r.clics), 0)
+  const displayImpr = display.reduce((s, r) => s + safeNumber(r.impresiones_visibles), 0)
+  const displayClics = display.reduce((s, r) => s + safeNumber(r.clics), 0)
+  const videoImpr = video.reduce((s, r) => s + safeNumber(r.impresiones_visibles), 0)
+  const videoViews = video.reduce((s, r) => s + safeNumber(r.views) + safeNumber(r.visualizaciones), 0)
+  return {
+    impresiones_visibles: impresiones,
+    clics,
+    ctr: displayImpr > 0 ? (displayClics / displayImpr) * 100 : 0,
+    cvr: videoImpr > 0 ? (videoViews / videoImpr) * 100 : 0,
+  }
+}
+
+export function GoogleAdsSection({ data = [], ciudades = [], keywords = [], proyecciones = [], selectedMonth, historicalGoogleAds = [], observaciones, loading, hallazgos = [] }) {
   if (loading) {
     return (
       <div className="space-y-6">
@@ -73,6 +97,14 @@ export function GoogleAdsSection({ data = [], ciudades = [], keywords = [], proy
   const videoViews = videoRows.reduce((s, r) => s + safeNumber(r.views) + safeNumber(r.visualizaciones), 0)
   const cvr = videoImpr > 0 ? (videoViews / videoImpr) * 100 : 0
 
+  const prevMonthValue = selectedMonth ? (() => {
+    const [y, m] = String(selectedMonth).split('-').map(Number)
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+  })() : null
+  const yearAgoValue = selectedMonth ? `${Number(String(selectedMonth).slice(0, 4)) - 1}-${String(selectedMonth).slice(5, 7)}` : null
+  const prevGoogle = aggregateGoogleMonth(historicalGoogleAds, prevMonthValue)
+  const yearGoogle = aggregateGoogleMonth(historicalGoogleAds, yearAgoValue)
+
   // Donut distribution by objective
   const byObjective = {}
   rows.forEach(r => {
@@ -102,11 +134,28 @@ export function GoogleAdsSection({ data = [], ciudades = [], keywords = [], proy
 
       {/* KPI overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Imp. Visibles"  value={totals.impresiones_visibles} icon={Eye}              accentColor="#a78bfa" delay={0} />
-        <KPICard title="Clics Totales"  value={totals.clics}                icon={MousePointerClick} accentColor="#3b82f6" delay={1} />
-        <KPICard title="CTR% (Display)" value={truncTo(ctr, 2)} suffix="%"  icon={TrendingUp}       accentColor="#22c55e" formatter={v => v} delay={2} />
-        <KPICard title="CVR% (Video)"   value={truncTo(cvr, 2)} suffix="%"  icon={Film}             accentColor="#ef4444" formatter={v => v} delay={3} />
+        <KPICard title="Imp. Visibles"  value={totals.impresiones_visibles} icon={Eye}              accentColor="#a78bfa"
+          variation={prevGoogle?.impresiones_visibles ? ((totals.impresiones_visibles - prevGoogle.impresiones_visibles) / Math.abs(prevGoogle.impresiones_visibles)) * 100 : null}
+          variationYear={yearGoogle?.impresiones_visibles ? ((totals.impresiones_visibles - yearGoogle.impresiones_visibles) / Math.abs(yearGoogle.impresiones_visibles)) * 100 : null} delay={0} />
+        <KPICard title="Clics Totales"  value={totals.clics}                icon={MousePointerClick} accentColor="#3b82f6"
+          variation={prevGoogle?.clics ? ((totals.clics - prevGoogle.clics) / Math.abs(prevGoogle.clics)) * 100 : null}
+          variationYear={yearGoogle?.clics ? ((totals.clics - yearGoogle.clics) / Math.abs(yearGoogle.clics)) * 100 : null} delay={1} />
+        <KPICard title="CTR% (Display)" value={truncTo(ctr, 2)} suffix="%"  icon={TrendingUp}       accentColor="#22c55e" formatter={v => v}
+          variation={prevGoogle?.ctr ? ((ctr - prevGoogle.ctr) / Math.abs(prevGoogle.ctr)) * 100 : null}
+          variationYear={yearGoogle?.ctr ? ((ctr - yearGoogle.ctr) / Math.abs(yearGoogle.ctr)) * 100 : null} delay={2} />
+        <KPICard title="CVR% (Video)"   value={truncTo(cvr, 2)} suffix="%"  icon={Film}             accentColor="#ef4444" formatter={v => v}
+          variation={prevGoogle?.cvr ? ((cvr - prevGoogle.cvr) / Math.abs(prevGoogle.cvr)) * 100 : null}
+          variationYear={yearGoogle?.cvr ? ((cvr - yearGoogle.cvr) / Math.abs(yearGoogle.cvr)) * 100 : null} delay={3} />
       </div>
+
+      <BreakdownInsightsAccordion
+        items={mergeLegacyObservations(
+          (hallazgos || []).filter(h => String(h.seccion || '').toLowerCase() === 'google-ads'),
+          (observaciones || []).filter(o => String(o.seccion || '').toLowerCase() === 'google-ads')
+        )}
+        accent={ACCENT}
+        label="Observaciones del desglose"
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {distribution.length > 0 && (
