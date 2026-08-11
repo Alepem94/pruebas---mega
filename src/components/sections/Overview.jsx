@@ -1,5 +1,4 @@
-import { motion } from 'framer-motion'
-import { Users, Eye, Heart, Megaphone, TrendingUp, Sparkles, AlertTriangle, Trophy } from 'lucide-react'
+import { Users, Eye, Heart, Megaphone, TrendingUp } from 'lucide-react'
 import { KPICard, KPICardSkeleton } from '../ui/KPICard'
 import { SectionHeader } from '../ui/SectionHeader'
 import { ChartCard, TrendLineChart, MultiScaleLineChart, DistributionDonut } from '../ui/Charts'
@@ -7,7 +6,7 @@ import { EditorialInsightCard, mergeLegacyObservations } from '../ui/EditorialIn
 import { SentimentGauge } from '../ui/SentimentGauge'
 import { safeNumber, formatCurrency, prevMonth, pctChange } from '../../utils/format'
 
-export function Overview({ data, historical, selectedMonth, loading, theme, features, hallazgos = [], observaciones = [] }) {
+export function Overview({ data, historical, selectedMonth, loading, theme, features, hallazgos = [], observaciones = [], allCampanas = [], allGoogleAds = [] }) {
   if (loading) {
     return (
       <div className="space-y-6">
@@ -40,13 +39,24 @@ export function Overview({ data, historical, selectedMonth, loading, theme, feat
 
   // Previous month aggregation for variation badges
   const pm = prevMonth(selectedMonth)
+  const py = selectedMonth ? `${Number(String(selectedMonth).slice(0, 4)) - 1}-${String(selectedMonth).slice(5, 7)}` : null
   const prevFb = (historical.facebook || []).find(r => r.mes === pm)
   const prevIg = (historical.instagram || []).find(r => r.mes === pm)
   const prevTt = (historical.tiktok || []).find(r => r.mes === pm)
   const prevSeguidores    = safeNumber(prevFb?.seguidores)    + safeNumber(prevIg?.seguidores)    + safeNumber(prevTt?.seguidores)
   const prevAlcance       = safeNumber(prevFb?.alcance)       + safeNumber(prevIg?.alcance)       + safeNumber(prevTt?.views)
   const prevInteracciones = safeNumber(prevFb?.interacciones) + safeNumber(prevIg?.interacciones) + safeNumber(prevTt?.interacciones)
-  const prevInversion     = 0 // Will show variation only when historical campañas data is available
+  const prevInversion     = (allCampanas || []).filter(r => r.mes === pm).reduce((s, r) => s + safeNumber(r.inversion), 0) +
+    (showGoogleAds ? (allGoogleAds || []).filter(r => r.mes === pm).reduce((s, r) => s + safeNumber(r.inversion), 0) : 0)
+
+  const yearFb = (historical.facebook || []).find(r => r.mes === py)
+  const yearIg = (historical.instagram || []).find(r => r.mes === py)
+  const yearTt = (historical.tiktok || []).find(r => r.mes === py)
+  const yearSeguidores = safeNumber(yearFb?.seguidores) + safeNumber(yearIg?.seguidores) + safeNumber(yearTt?.seguidores)
+  const yearAlcance = safeNumber(yearFb?.alcance) + safeNumber(yearIg?.alcance) + safeNumber(yearTt?.views)
+  const yearInteracciones = safeNumber(yearFb?.interacciones) + safeNumber(yearIg?.interacciones) + safeNumber(yearTt?.interacciones)
+  const yearInversion = (allCampanas || []).filter(r => r.mes === py).reduce((s, r) => s + safeNumber(r.inversion), 0) +
+    (showGoogleAds ? (allGoogleAds || []).filter(r => r.mes === py).reduce((s, r) => s + safeNumber(r.inversion), 0) : 0)
 
   // Followers trend — last 6 months up to and including selectedMonth
   // Works for both 'month' mode and 'range' mode (selectedMonth = effectiveMonth from Dashboard)
@@ -90,11 +100,6 @@ export function Overview({ data, historical, selectedMonth, loading, theme, feat
     (observaciones || []).filter(o => String(o.seccion || '').toLowerCase() === 'overview')
   )
 
-  const topHallazgos = (data.hallazgos || [])
-    .filter(h => h.seccion === 'overview')
-    .sort((a, b) => safeNumber(a.prioridad) - safeNumber(b.prioridad))
-    .slice(0, 4)
-
 
   return (
     <div className="space-y-6">
@@ -108,10 +113,10 @@ export function Overview({ data, historical, selectedMonth, loading, theme, feat
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Seguidores Totales" value={totalSeguidores}    icon={Users}     accentColor={theme.primary} variation={pctChange(totalSeguidores, prevSeguidores)} delay={0} />
-        <KPICard title="Alcance / Views"    value={totalAlcance}       icon={Eye}       accentColor="#22d3ee"       variation={pctChange(totalAlcance, prevAlcance)} delay={1} />
-        <KPICard title="Interacciones"      value={totalInteracciones} icon={Heart}     accentColor="#ec4899"       variation={pctChange(totalInteracciones, prevInteracciones)} delay={2} />
-        <KPICard title="Inversión Total"    value={totalInversion}     icon={Megaphone} accentColor="#f59e0b"       variation={pctChange(totalInversion, prevInversion)} formatter={v => formatCurrency(v)} delay={3} />
+        <KPICard title="Seguidores Totales" value={totalSeguidores}    icon={Users}     accentColor={theme.primary} variation={pctChange(totalSeguidores, prevSeguidores)} variationYear={pctChange(totalSeguidores, yearSeguidores)} delay={0} />
+        <KPICard title="Alcance / Views"    value={totalAlcance}       icon={Eye}       accentColor="#22d3ee"       variation={pctChange(totalAlcance, prevAlcance)} variationYear={pctChange(totalAlcance, yearAlcance)} delay={1} />
+        <KPICard title="Interacciones"      value={totalInteracciones} icon={Heart}     accentColor="#ec4899"       variation={pctChange(totalInteracciones, prevInteracciones)} variationYear={pctChange(totalInteracciones, yearInteracciones)} delay={2} />
+        <KPICard title="Inversión Total"    value={totalInversion}     icon={Megaphone} accentColor="#f59e0b"       variation={pctChange(totalInversion, prevInversion)} variationYear={pctChange(totalInversion, yearInversion)} formatter={v => formatCurrency(v)} delay={3} />
       </div>
 
       {editorialHallazgos.length > 0 && (
@@ -151,59 +156,17 @@ export function Overview({ data, historical, selectedMonth, loading, theme, feat
         </ChartCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {sentiment && (
-          <ChartCard title="Sentiment de Marca" subtitle="Percepción del público" allowLogScale={false} expandable={false}>
+      {sentiment && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <ChartCard title="Sentiment de Marca" subtitle="Percepción del público" className="lg:col-span-3" allowLogScale={false} expandable={false}>
             <SentimentGauge
               positivo={sentiment.positivo_pct}
               neutro={sentiment.neutro_pct}
               negativo={sentiment.negativo_pct}
             />
           </ChartCard>
-        )}
-
-        <ChartCard
-          title="Hallazgos Clave"
-          subtitle="Top insights del mes"
-          className={sentiment ? 'lg:col-span-2' : 'lg:col-span-3'}
-          allowLogScale={false}
-          expandable={false}
-        >
-          {topHallazgos.length > 0 ? (
-            <div className="space-y-3">
-              {topHallazgos.map((h, i) => <HallazgoRow key={i} hallazgo={h} delay={i} />)}
-            </div>
-          ) : (
-            <p className="text-white/40 text-sm py-8 text-center">Sin hallazgos registrados</p>
-          )}
-        </ChartCard>
-      </div>
+        </div>
+      )}
     </div>
-  )
-}
-
-function HallazgoRow({ hallazgo, delay }) {
-  const isLogro  = /logro|positivo|exito|éxito/i.test(hallazgo.tipo || '')
-  const isAlerta = /alerta|riesgo|problema|negativo/i.test(hallazgo.tipo || '')
-  const Icon = isLogro ? Trophy : isAlerta ? AlertTriangle : Sparkles
-  const color = isLogro ? '#22c55e' : isAlerta ? '#ef4444' : '#facc15'
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: delay * 0.08 }}
-      className="flex gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors"
-    >
-      <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${color}22`, border: `1px solid ${color}44` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white">{hallazgo.titulo}</p>
-        {hallazgo.descripcion && (
-          <p className="text-xs text-white/55 mt-0.5 line-clamp-2">{hallazgo.descripcion}</p>
-        )}
-      </div>
-    </motion.div>
   )
 }
